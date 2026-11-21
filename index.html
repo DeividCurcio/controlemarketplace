@@ -7,7 +7,6 @@
   <meta name="theme-color" content="#f9fafb" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
@@ -34,48 +33,12 @@
       <p class="text-gray-500 mt-1">Controle de Pedidos com Scanner</p>
     </header>
 
-    <!-- Tela de Login -->
-    <div id="login-screen" class="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-5 sm:p-8">
-      <h2 class="text-2xl font-semibold text-gray-900 mb-1 text-center">Entrar na equipe</h2>
-      <p class="text-sm text-gray-500 mb-6 text-center">Entre com sua conta Google. Os pedidos ficam salvos neste navegador, sem sincronização entre dispositivos.</p>
-      <p class="text-xs text-gray-500 mb-4 text-center">Sem um servidor, o Google identifica o perfil, mas não protege os dados contra acesso local.</p>
-
-      <div id="google-button" class="flex justify-center min-h-11"></div>
-
-      <p id="auth-message" role="status" aria-live="polite" class="text-sm text-center mt-4 text-red-600"></p>
-    </div>
-
-    <!-- Tela de Código da Equipe -->
-    <div id="team-screen" class="hidden max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-5 sm:p-8">
-      <div class="flex items-center gap-3 mb-6">
-        <img id="user-photo" class="w-12 h-12 rounded-full bg-gray-200 shrink-0" src="" alt="Foto do usuário" />
-        <div class="min-w-0">
-          <p class="font-semibold" id="user-display-name"></p>
-          <p class="text-sm text-gray-500 break-all" id="user-email-display"></p>
-        </div>
-      </div>
-
-      <h2 class="text-xl font-semibold mb-1">Código da equipe</h2>
-      <p class="text-sm text-gray-500 mb-5">Digite um código para organizar seus pedidos neste navegador.</p>
-
-      <input id="team-code" type="text" autocomplete="off" placeholder="Ex: LOJA2026" class="w-full px-4 py-3.5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none uppercase tracking-wider mb-4" />
-      <p id="team-message" role="status" aria-live="polite" class="hidden text-sm mb-4 text-red-600"></p>
-      <button onclick="enterTeam()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-2xl">Entrar na equipe</button>
-      <button onclick="logout()" class="w-full mt-3 text-sm text-red-600">Sair da conta</button>
-    </div>
-
     <!-- App Principal -->
-    <div id="main-app" class="hidden">
+    <div id="main-app">
       <p id="app-message" role="status" aria-live="polite" class="hidden"></p>
-      <div class="flex justify-between items-center gap-3 mb-6">
-        <div class="flex items-center gap-3 min-w-0">
-          <img id="main-user-photo" class="w-10 h-10 rounded-full bg-gray-200 shrink-0" src="" alt="Foto do usuário" />
-          <div class="min-w-0">
-            <p class="text-sm font-semibold truncate" id="main-user-name"></p>
-            <p class="text-xs text-gray-500">Equipe <span id="current-team" class="font-semibold"></span></p>
-          </div>
-        </div>
-        <button type="button" onclick="logout()" class="shrink-0 text-sm font-medium text-red-600 px-3">Sair</button>
+      <div class="mb-6">
+        <p id="main-user-name" class="text-sm font-semibold">Modo local</p>
+        <p class="text-xs text-gray-500">Dados salvos somente neste navegador · <span id="current-team" class="font-semibold">LOCAL</span></p>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
@@ -121,22 +84,16 @@
   </div>
 
   <script>
-    const GOOGLE_CLIENT_ID = 'SEU_CLIENT_ID.apps.googleusercontent.com';
     const TEAM_STORAGE_PREFIX = 'controle-pedidos:';
+    const LOCAL_TEAM_CODE = 'LOCAL';
 
-    let currentTeam = null;
-    let currentUser = null;
+    let currentTeam = LOCAL_TEAM_CODE;
+    const currentUser = { displayName: 'Usuário local', email: '', photoURL: '' };
     let stores = [];
     let html5QrCode = null;
     let scanningStoreId = null;
     let lastScanned = null;
     let lastScanTime = 0;
-
-    function showMessage(msg, isError = true) {
-      const el = document.getElementById('auth-message');
-      el.textContent = msg;
-      el.className = isError ? 'text-sm text-center mt-4 text-red-600' : 'text-sm text-center mt-4 text-green-600';
-    }
 
     function showAppMessage(msg, isError = true) {
       const el = document.getElementById('app-message');
@@ -144,88 +101,12 @@
       el.className = msg ? `text-sm mb-4 ${isError ? 'text-red-600' : 'text-green-600'}` : 'hidden';
     }
 
-    function showTeamMessage(msg) {
-      const el = document.getElementById('team-message');
-      el.textContent = msg;
-      el.className = msg ? 'text-sm mb-4 text-red-600' : 'hidden';
-    }
-
-    function renderGoogleButton() {
-      const button = document.getElementById('google-button');
-      button.replaceChildren();
-      google.accounts.id.renderButton(button, {
-        type: 'standard',
-        theme: 'outline',
-        size: 'large',
-        text: 'continue_with',
-        shape: 'rectangular',
-        width: Math.min(button.clientWidth, 400),
-        locale: 'pt-BR'
-      });
-    }
-
-    function initializeGoogleSignIn() {
-      if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.startsWith('SEU_CLIENT_ID')) {
-        showMessage('Configure o Client ID OAuth do Google para habilitar o login.');
-        return;
-      }
-      if (!window.google || !google.accounts || !google.accounts.id) {
-        showMessage('Não foi possível carregar o login do Google. Verifique sua conexão e tente novamente.');
-        return;
-      }
-
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleGoogleCredential,
-        auto_select: false
-      });
-      renderGoogleButton();
-      showMessage('');
-      window.addEventListener('resize', renderGoogleButton);
-    }
-
-    function handleGoogleCredential(response) {
-      try {
-        if (!response || !response.credential) throw new Error('Credencial Google ausente');
-        const encodedPayload = response.credential.split('.')[1];
-        const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
-        const bytes = Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')), char => char.charCodeAt(0));
-        const profile = JSON.parse(new TextDecoder().decode(bytes));
-        const issuerIsValid = profile.iss === 'https://accounts.google.com' || profile.iss === 'accounts.google.com';
-        if (!profile.sub || !profile.email || profile.email_verified !== true ||
-            profile.aud !== GOOGLE_CLIENT_ID || !issuerIsValid || profile.exp * 1000 <= Date.now()) {
-          throw new Error('Credencial Google inválida ou expirada');
-        }
-
-        currentUser = {
-          uid: profile.sub,
-          displayName: profile.name || profile.email.split('@')[0],
-          email: profile.email,
-          photoURL: profile.picture || ''
-        };
-        document.getElementById('user-photo').src = currentUser.photoURL;
-        document.getElementById('user-display-name').textContent = currentUser.displayName;
-        document.getElementById('user-email-display').textContent = currentUser.email;
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('team-screen').classList.remove('hidden');
-        showMessage('');
-      } catch (error) {
-        showMessage('Não foi possível validar a resposta do Google. Tente entrar novamente.');
-        console.error('Falha ao processar login Google:', error);
-      }
-    }
-
-    window.addEventListener('load', initializeGoogleSignIn, { once: true });
-
     function getTeamStorageKey(teamCode) {
-      return TEAM_STORAGE_PREFIX + encodeURIComponent(currentUser.uid) + ':' + encodeURIComponent(teamCode);
+      return TEAM_STORAGE_PREFIX + encodeURIComponent(teamCode);
     }
 
     function enterTeam() {
-      if (!currentUser) return;
-      const code = document.getElementById('team-code').value.trim().toUpperCase();
-      if (!code) return showTeamMessage('Digite o código da equipe.');
-      showTeamMessage('');
+      const code = LOCAL_TEAM_CODE;
       try {
         const savedStores = localStorage.getItem(getTeamStorageKey(code));
         if (savedStores === null) {
@@ -259,31 +140,17 @@
         }
 
         currentTeam = code;
-        const name = currentUser.displayName || currentUser.email.split('@')[0];
         document.getElementById('current-team').textContent = code;
-        document.getElementById('main-user-name').textContent = name;
-        document.getElementById('main-user-photo').src = currentUser.photoURL;
-        document.getElementById('team-screen').classList.add('hidden');
-        document.getElementById('main-app').classList.remove('hidden');
         showAppMessage('');
         renderStores();
         if (savedStores === null) saveStores();
       } catch (error) {
-        showTeamMessage('Não foi possível carregar os dados deste navegador. Confira o armazenamento local e tente novamente.');
-        console.error('Falha ao carregar a equipe local:', error);
+        showAppMessage('Não foi possível carregar os dados deste navegador. Confira o armazenamento local e tente novamente.');
+        console.error('Falha ao carregar os dados locais:', error);
       }
     }
 
-    function logout() {
-      if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
-      currentTeam = null;
-      currentUser = null;
-      stores = [];
-      document.getElementById('team-code').value = '';
-      document.getElementById('main-app').classList.add('hidden');
-      document.getElementById('team-screen').classList.add('hidden');
-      document.getElementById('login-screen').classList.remove('hidden');
-    }
+    window.addEventListener('DOMContentLoaded', enterTeam, { once: true });
 
     document.getElementById('stores-list').addEventListener('click', event => {
       if (!(event.target instanceof Element)) return;
