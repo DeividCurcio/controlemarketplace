@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Controle de Pedidos — Entregas com Scanner + Auth Completo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
+    .store-card { transition: transform 0.15s ease; }
+    .store-card:active { transform: scale(0.98); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="app" class="max-w-2xl mx-auto p-4 pb-24">
+
+    <header class="text-center mb-8 pt-4">
+      <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Entregas</h1>
+      <p class="text-gray-500 mt-1">Controle de Pedidos com Scanner</p>
+    </header>
+
+    <!-- Tela de Login -->
+    <div id="login-screen" class="bg-white rounded-3xl shadow-xl p-6 sm:p-8">
+      <h2 class="text-2xl font-semibold text-gray-900 mb-1 text-center">Entrar na equipe</h2>
+      <p class="text-sm text-gray-500 mb-6 text-center">Cada pessoa entra com a própria conta. Depois usam o mesmo código para contar juntas.</p>
+
+      <!-- Google -->
+      <button onclick="loginWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3.5 rounded-2xl transition shadow-sm mb-5">
+        <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continuar com Google
+      </button>
+
+      <div class="relative my-6">
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+        <div class="relative flex justify-center text-sm"><span class="px-3 bg-white text-gray-500">ou com e-mail</span></div>
+      </div>
+
+      <!-- Email / Senha -->
+      <div class="space-y-4">
+        <input id="email" type="email" placeholder="E-mail" class="w-full px-4 py-3.5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none" />
+        <input id="password" type="password" placeholder="Senha" class="w-full px-4 py-3.5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none" />
+        
+        <div class="flex gap-2">
+          <button onclick="loginWithEmail()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-2xl">Entrar</button>
+          <button onclick="registerWithEmail()" class="flex-1 bg-gray-100 hover:bg-gray-200 font-semibold py-3.5 rounded-2xl">Criar conta</button>
+        </div>
+      </div>
+
+      <p id="auth-message" class="text-sm text-center mt-4 text-red-600"></p>
+    </div>
+
+    <!-- Tela de Código da Equipe -->
+    <div id="team-screen" class="hidden bg-white rounded-3xl shadow-xl p-6 sm:p-8">
+      <div class="flex items-center gap-3 mb-6">
+        <img id="user-photo" class="w-12 h-12 rounded-full bg-gray-200" src="" alt="" />
+        <div>
+          <p class="font-semibold" id="user-display-name"></p>
+          <p class="text-sm text-gray-500" id="user-email-display"></p>
+        </div>
+      </div>
+
+      <h2 class="text-xl font-semibold mb-1">Código da equipe</h2>
+      <p class="text-sm text-gray-500 mb-5">Digite o código compartilhado para contar juntos.</p>
+
+      <input id="team-code" type="text" placeholder="Ex: LOJA2026" class="w-full px-4 py-3.5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none uppercase tracking-wider mb-4" />
+      <button onclick="enterTeam()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 rounded-2xl">Entrar na equipe</button>
+      <button onclick="logout()" class="w-full mt-3 text-sm text-red-600">Sair da conta</button>
+    </div>
+
+    <!-- App Principal -->
+    <div id="main-app" class="hidden">
+      <div class="flex justify-between items-center mb-6">
+        <div class="flex items-center gap-3">
+          <img id="main-user-photo" class="w-10 h-10 rounded-full bg-gray-200" src="" alt="" />
+          <div>
+            <p class="text-sm font-semibold" id="main-user-name"></p>
+            <p class="text-xs text-gray-500">Equipe <span id="current-team" class="font-semibold"></span></p>
+          </div>
+        </div>
+        <button onclick="logout()" class="text-sm font-medium text-red-600">Sair</button>
+      </div>
+
+      <div class="flex gap-2 mb-6">
+        <button onclick="showDailyReport()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl font-medium text-sm">📊 Relatório do Dia</button>
+        <button onclick="exportToCSV()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl font-medium text-sm">📥 Exportar Excel</button>
+      </div>
+
+      <div class="bg-white rounded-3xl shadow-sm p-5 mb-6">
+        <h3 class="font-semibold text-gray-900 mb-3">Nova loja</h3>
+        <div class="flex gap-2">
+          <input id="new-store" type="text" placeholder="Nome da loja" class="flex-1 px-4 py-3.5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none" />
+          <button onclick="addStore()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 rounded-2xl font-semibold text-xl">+</button>
+        </div>
+      </div>
+
+      <div id="stores-list" class="space-y-4"></div>
+
+      <!-- Modal Scanner -->
+      <div id="scanner-modal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl p-5 max-w-md w-full">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-semibold text-lg">Escanear Pedido</h3>
+            <button onclick="closeScanner()" class="text-gray-400 text-3xl leading-none">&times;</button>
+          </div>
+          <div id="reader" class="rounded-2xl overflow-hidden bg-black"></div>
+          <p id="scan-status" class="text-center text-sm text-gray-600 mt-4">Aponte a câmera para o código</p>
+          <button onclick="closeScanner()" class="mt-5 w-full bg-gray-100 py-3.5 rounded-2xl font-medium">Fechar</button>
+        </div>
+      </div>
+
+      <!-- Modal Relatório -->
+      <div id="report-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-3xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-semibold text-lg">Relatório do Dia</h3>
+            <button onclick="closeReport()" class="text-gray-400 text-3xl">&times;</button>
+          </div>
+          <div id="report-content" class="space-y-3 text-sm"></div>
+          <button onclick="closeReport()" class="mt-5 w-full bg-gray-100 py-3.5 rounded-2xl">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // COLE AQUI O firebaseConfig DO SEU PROJETO
+    // ============================================================
+    const firebaseConfig = {
+      apiKey: "COLE_AQUI_SUA_API_KEY",
+      authDomain: "seu-projeto.firebaseapp.com",
+      databaseURL: "https://seu-projeto-default-rtdb.firebaseio.com",
+      projectId: "seu-projeto",
+      storageBucket: "seu-projeto.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+    let currentTeam = null;
+    let currentUser = null;
+    let stores = [];
+    let html5QrCode = null;
+    let scanningStoreId = null;
+    let lastScanned = null;
+    let lastScanTime = 0;
+    let storesRef = null;
+
+    function showMessage(msg, isError = true) {
+      const el = document.getElementById('auth-message');
+      el.textContent = msg;
+      el.className = isError ? 'text-sm text-center mt-4 text-red-600' : 'text-sm text-center mt-4 text-green-600';
+    }
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUser = user;
+        const name = user.displayName || user.email.split('@')[0];
+        document.getElementById('user-photo').src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=3b82f6&color=fff`;
+        document.getElementById('user-display-name').textContent = name;
+        document.getElementById('user-email-display').textContent = user.email || '';
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('team-screen').classList.remove('hidden');
+      } else {
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('team-screen').classList.add('hidden');
+        document.getElementById('main-app').classList.add('hidden');
+      }
+    });
+
+    function loginWithGoogle() {
+      auth.signInWithPopup(googleProvider).catch(err => showMessage(err.message));
+    }
+
+    function loginWithEmail() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      if (!email || !password) return showMessage('Preencha e-mail e senha.');
+      auth.signInWithEmailAndPassword(email, password)
+        .then(() => showMessage(''))
+        .catch(err => showMessage(err.message));
+    }
+
+    function registerWithEmail() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      if (!email || !password) return showMessage('Preencha e-mail e senha.');
+      if (password.length < 6) return showMessage('A senha deve ter pelo menos 6 caracteres.');
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(() => showMessage('Conta criada! Entrando...', false))
+        .catch(err => showMessage(err.message));
+    }
+
+    function enterTeam() {
+      const code = document.getElementById('team-code').value.trim().toUpperCase();
+      if (!code) return alert('Digite o código da equipe.');
+      currentTeam = code;
+      const name = currentUser.displayName || currentUser.email.split('@')[0];
+      document.getElementById('current-team').textContent = code;
+      document.getElementById('main-user-name').textContent = name;
+      document.getElementById('main-user-photo').src = currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=3b82f6&color=fff`;
+      document.getElementById('team-screen').classList.add('hidden');
+      document.getElementById('main-app').classList.remove('hidden');
+
+      storesRef = db.ref('teams/' + currentTeam + '/stores');
+      storesRef.once('value').then((snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          // Cria as lojas padrão se a equipe ainda não tiver nenhuma
+          const defaultStores = [
+            { name: "Mercado Livre" },
+            { name: "Shopee" },
+            { name: "Shein" },
+            { name: "Kwai" },
+            { name: "Tik Tok" },
+            { name: "Tik Tok J&T" },
+            { name: "Temu" },
+            { name: "Amazon" }
+          ];
+          const obj = {};
+          defaultStores.forEach((s, i) => {
+            const id = (Date.now() + i).toString();
+            obj[id] = { name: s.name, count: 0, orders: [] };
+          });
+          db.ref('teams/' + currentTeam + '/stores').set(obj);
+        }
+      });
+
+      storesRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        stores = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+        renderStores();
+      });
+    }
+
+    function logout() {
+      if (storesRef) storesRef.off();
+      auth.signOut();
+      currentTeam = null;
+      stores = [];
+    }
+
+    function saveStores() {
+      if (!currentTeam) return;
+      const obj = {};
+      stores.forEach(s => { 
+        const copy = { ...s }; 
+        delete copy.id; 
+        obj[s.id] = copy; 
+      });
+      db.ref('teams/' + currentTeam + '/stores').set(obj);
+    }
+
+    function addStore() {
+      const name = document.getElementById('new-store').value.trim();
+      if (!name) return;
+      const newId = Date.now().toString();
+      stores.push({ id: newId, name, count: 0, orders: [] });
+      document.getElementById('new-store').value = '';
+      saveStores();
+    }
+
+    function renderStores() {
+      const container = document.getElementById('stores-list');
+      if (!stores.length) {
+        container.innerHTML = '<div class="text-center py-12 text-gray-400"><p>Nenhuma loja ainda</p></div>';
+        return;
+      }
+      container.innerHTML = stores.map(store => `
+        <div class="store-card bg-white rounded-3xl shadow-sm p-5">
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="text-lg font-semibold">${escapeHtml(store.name)}</h3>
+              <div class="mt-1 flex items-baseline gap-2">
+                <span class="text-5xl font-bold text-blue-600">${store.count || 0}</span>
+                <span class="text-sm text-gray-500">pedidos</span>
+              </div>
+            </div>
+            <button onclick="deleteStore('${store.id}')" class="text-sm text-red-500">Excluir</button>
+          </div>
+          <div class="flex gap-2 mt-5">
+            <button onclick="openScanner('${store.id}')" class="flex-1 bg-blue-600 text-white py-3.5 rounded-2xl font-medium">📷 Escanear</button>
+            <button onclick="manualAdd('${store.id}')" class="px-5 bg-gray-100 rounded-2xl font-medium">+ Manual</button>
+          </div>
+          <button onclick="resetStore('${store.id}')" class="mt-3 text-sm text-orange-600">Zerar contagem</button>
+          ${store.orders && store.orders.length ? `
+            <div class="mt-4 pt-4 border-t text-xs text-gray-500 max-h-32 overflow-y-auto">
+              ${store.orders.slice(-5).reverse().map(o => `<div>${escapeHtml(o.code)} · ${escapeHtml(o.user)}</div>`).join('')}
+            </div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text || '';
+      return div.innerHTML;
+    }
+
+    function openScanner(storeId) {
+      scanningStoreId = storeId;
+      document.getElementById('scanner-modal').classList.remove('hidden');
+      document.getElementById('scanner-modal').classList.add('flex');
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, () => {});
+    }
+
+    function onScanSuccess(decodedText) {
+      const now = Date.now();
+      if (decodedText === lastScanned && now - lastScanTime < 1800) return;
+      lastScanned = decodedText;
+      lastScanTime = now;
+
+      const store = stores.find(s => s.id === scanningStoreId);
+      if (!store) return;
+      if (!store.orders) store.orders = [];
+      if (store.orders.some(o => o.code === decodedText)) {
+        document.getElementById('scan-status').textContent = 'Já contado';
+        return;
+      }
+      const userName = currentUser.displayName || currentUser.email.split('@')[0];
+      store.orders.push({ code: decodedText, time: now, user: userName });
+      store.count = store.orders.length;
+      saveStores();
+      document.getElementById('scan-status').textContent = '✅ Contado: ' + decodedText;
+    }
+
+    function closeScanner() {
+      if (html5QrCode) html5QrCode.stop().then(() => html5QrCode.clear());
+      document.getElementById('scanner-modal').classList.add('hidden');
+      document.getElementById('scanner-modal').classList.remove('flex');
+    }
+
+    function manualAdd(storeId) {
+      const code = prompt('Código do pedido:');
+      if (!code) return;
+      const store = stores.find(s => s.id === storeId);
+      if (!store) return;
+      if (!store.orders) store.orders = [];
+      if (store.orders.some(o => o.code === code.trim())) return alert('Já contado');
+      const userName = currentUser.displayName || currentUser.email.split('@')[0];
+      store.orders.push({ code: code.trim(), time: Date.now(), user: userName });
+      store.count = store.orders.length;
+      saveStores();
+    }
+
+    function resetStore(storeId) {
+      if (!confirm('Zerar?')) return;
+      const store = stores.find(s => s.id === storeId);
+      if (store) { store.count = 0; store.orders = []; saveStores(); }
+    }
+
+    function deleteStore(storeId) {
+      if (!confirm('Excluir loja?')) return;
+      stores = stores.filter(s => s.id !== storeId);
+      saveStores();
+    }
+
+    function showDailyReport() {
+      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+      const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
+      let total = 0;
+      let html = `<p class="font-medium mb-3">Hoje: ${new Date().toLocaleDateString('pt-BR')}</p>`;
+      stores.forEach(store => {
+        const hoje = (store.orders || []).filter(o => new Date(o.time) >= todayStart && new Date(o.time) <= todayEnd);
+        total += hoje.length;
+        html += `<div class="bg-gray-50 p-3 rounded-2xl"><div class="flex justify-between font-semibold"><span>${escapeHtml(store.name)}</span><span class="text-blue-600">${hoje.length}</span></div></div>`;
+      });
+      html += `<div class="text-center font-bold text-lg mt-4">Total: ${total}</div>`;
+      document.getElementById('report-content').innerHTML = html;
+      document.getElementById('report-modal').classList.remove('hidden');
+      document.getElementById('report-modal').classList.add('flex');
+    }
+
+    function closeReport() {
+      document.getElementById('report-modal').classList.add('hidden');
+      document.getElementById('report-modal').classList.remove('flex');
+    }
+
+    function exportToCSV() {
+      let csv = 'Loja,Codigo,Data,Hora,Usuario\n';
+      stores.forEach(store => {
+        (store.orders || []).forEach(o => {
+          const d = new Date(o.time);
+          csv += `"${store.name}","${o.code}","${d.toLocaleDateString('pt-BR')}","${d.toLocaleTimeString('pt-BR')}","${o.user}"\n`;
+        });
+      });
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `pedidos_${currentTeam}.csv`;
+      a.click();
+    }
+  </script>
+</body>
+</html>
