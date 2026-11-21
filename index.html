@@ -3,14 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Controle de Pedidos — Entregas com Scanner + Auth Completo</title>
+  <title>Controle de Pedidos — Entregas com Scanner</title>
   <meta name="theme-color" content="#f9fafb" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <!-- Firebase -->
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     #reader { width: 100%; max-width: 400px; margin: 0 auto; border-radius: 12px; overflow: hidden; }
@@ -40,13 +37,10 @@
     <!-- Tela de Login -->
     <div id="login-screen" class="max-w-xl mx-auto bg-white rounded-3xl shadow-xl p-5 sm:p-8">
       <h2 class="text-2xl font-semibold text-gray-900 mb-1 text-center">Entrar na equipe</h2>
-      <p class="text-sm text-gray-500 mb-6 text-center">Entre com sua conta Google. No primeiro acesso, sua conta será criada automaticamente.</p>
+      <p class="text-sm text-gray-500 mb-6 text-center">Entre com sua conta Google. Os pedidos ficam salvos neste navegador, sem sincronização entre dispositivos.</p>
+      <p class="text-xs text-gray-500 mb-4 text-center">Sem um servidor, o Google identifica o perfil, mas não protege os dados contra acesso local.</p>
 
-      <!-- Google -->
-      <button id="google-login" type="button" onclick="loginWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed text-gray-700 font-medium py-3.5 rounded-2xl transition shadow-sm">
-        <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-        Continuar com Google
-      </button>
+      <div id="google-button" class="flex justify-center min-h-11"></div>
 
       <p id="auth-message" role="status" aria-live="polite" class="text-sm text-center mt-4 text-red-600"></p>
     </div>
@@ -62,7 +56,7 @@
       </div>
 
       <h2 class="text-xl font-semibold mb-1">Código da equipe</h2>
-      <p class="text-sm text-gray-500 mb-5">Digite o código compartilhado para contar juntos.</p>
+      <p class="text-sm text-gray-500 mb-5">Digite um código para organizar seus pedidos neste navegador.</p>
 
       <input id="team-code" type="text" autocomplete="off" placeholder="Ex: LOJA2026" class="w-full px-4 py-3.5 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none uppercase tracking-wider mb-4" />
       <p id="team-message" role="status" aria-live="polite" class="hidden text-sm mb-4 text-red-600"></p>
@@ -86,7 +80,7 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <button onclick="showDailyReport()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl font-medium text-sm">📊 Relatório do Dia</button>
-        <button onclick="exportToCSV()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl font-medium text-sm">📥 Exportar Excel</button>
+        <button onclick="exportToCSV()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-2xl font-medium text-sm">📥 Exportar CSV</button>
       </div>
 
       <div class="bg-white rounded-3xl shadow-sm p-4 sm:p-5 mb-6">
@@ -127,34 +121,8 @@
   </div>
 
   <script>
-    // ============================================================
-    // COLE AQUI O firebaseConfig DO SEU PROJETO
-    // ============================================================
-    const firebaseConfig = {
-      apiKey: "COLE_AQUI_SUA_API_KEY",
-      authDomain: "seu-projeto.firebaseapp.com",
-      databaseURL: "https://seu-projeto-default-rtdb.firebaseio.com",
-      projectId: "seu-projeto",
-      storageBucket: "seu-projeto.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef"
-    };
-
-    const hasFirebaseConfig = Object.values(firebaseConfig).every(value =>
-      typeof value === 'string' &&
-      value.trim() !== '' &&
-      !/^(COLE_AQUI|seu-projeto|123456789|1:123456789:web:abcdef)/.test(value)
-    );
-    let db = null;
-    let auth = null;
-    let googleProvider = null;
-
-    if (hasFirebaseConfig) {
-      firebase.initializeApp(firebaseConfig);
-      db = firebase.database();
-      auth = firebase.auth();
-      googleProvider = new firebase.auth.GoogleAuthProvider();
-    }
+    const GOOGLE_CLIENT_ID = 'SEU_CLIENT_ID.apps.googleusercontent.com';
+    const TEAM_STORAGE_PREFIX = 'controle-pedidos:';
 
     let currentTeam = null;
     let currentUser = null;
@@ -163,7 +131,6 @@
     let scanningStoreId = null;
     let lastScanned = null;
     let lastScanTime = 0;
-    let storesRef = null;
 
     function showMessage(msg, isError = true) {
       const el = document.getElementById('auth-message');
@@ -183,81 +150,85 @@
       el.className = msg ? 'text-sm mb-4 text-red-600' : 'hidden';
     }
 
-    if (auth) {
-      auth.onAuthStateChanged(user => {
-        if (user) {
-          currentUser = user;
-          const name = user.displayName || (user.email && user.email.split('@')[0]) || 'Usuário';
-          document.getElementById('user-photo').src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=3b82f6&color=fff`;
-          document.getElementById('user-display-name').textContent = name;
-          document.getElementById('user-email-display').textContent = user.email || '';
-          document.getElementById('login-screen').classList.add('hidden');
-          document.getElementById('team-screen').classList.remove('hidden');
-        } else {
-          currentUser = null;
-          document.getElementById('login-screen').classList.remove('hidden');
-          document.getElementById('team-screen').classList.add('hidden');
-          document.getElementById('main-app').classList.add('hidden');
-        }
-      }, error => {
-        showMessage('Não foi possível verificar sua sessão. Confira a configuração do Firebase.');
-        console.error('Falha ao verificar a sessão:', error);
+    function renderGoogleButton() {
+      const button = document.getElementById('google-button');
+      button.replaceChildren();
+      google.accounts.id.renderButton(button, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'rectangular',
+        width: Math.min(button.clientWidth, 400),
+        locale: 'pt-BR'
       });
-    } else {
-      document.getElementById('google-login').disabled = true;
-      showMessage('O login Google ainda não está configurado. Adicione os dados do Firebase para habilitá-lo.');
     }
 
-    async function loginWithGoogle() {
-      if (!auth || !googleProvider) {
-        showMessage('O login Google ainda não está configurado. Adicione os dados do Firebase para habilitá-lo.');
+    function initializeGoogleSignIn() {
+      if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.startsWith('SEU_CLIENT_ID')) {
+        showMessage('Configure o Client ID OAuth do Google para habilitar o login.');
+        return;
+      }
+      if (!window.google || !google.accounts || !google.accounts.id) {
+        showMessage('Não foi possível carregar o login do Google. Verifique sua conexão e tente novamente.');
         return;
       }
 
-      const button = document.getElementById('google-login');
-      button.disabled = true;
-      button.setAttribute('aria-busy', 'true');
-      showMessage('Conectando ao Google...', false);
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        auto_select: false
+      });
+      renderGoogleButton();
+      showMessage('');
+      window.addEventListener('resize', renderGoogleButton);
+    }
 
+    function handleGoogleCredential(response) {
       try {
-        await auth.signInWithPopup(googleProvider);
+        if (!response || !response.credential) throw new Error('Credencial Google ausente');
+        const encodedPayload = response.credential.split('.')[1];
+        const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/');
+        const bytes = Uint8Array.from(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')), char => char.charCodeAt(0));
+        const profile = JSON.parse(new TextDecoder().decode(bytes));
+        const issuerIsValid = profile.iss === 'https://accounts.google.com' || profile.iss === 'accounts.google.com';
+        if (!profile.sub || !profile.email || profile.email_verified !== true ||
+            profile.aud !== GOOGLE_CLIENT_ID || !issuerIsValid || profile.exp * 1000 <= Date.now()) {
+          throw new Error('Credencial Google inválida ou expirada');
+        }
+
+        currentUser = {
+          uid: profile.sub,
+          displayName: profile.name || profile.email.split('@')[0],
+          email: profile.email,
+          photoURL: profile.picture || ''
+        };
+        document.getElementById('user-photo').src = currentUser.photoURL;
+        document.getElementById('user-display-name').textContent = currentUser.displayName;
+        document.getElementById('user-email-display').textContent = currentUser.email;
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('team-screen').classList.remove('hidden');
         showMessage('');
       } catch (error) {
-        const messages = {
-          'auth/unauthorized-domain': 'Este domínio não está autorizado no Firebase Authentication.',
-          'auth/operation-not-allowed': 'Ative o provedor Google no Firebase Authentication.',
-          'auth/popup-blocked': 'O navegador bloqueou a janela de login. Permita pop-ups e tente novamente.',
-          'auth/popup-closed-by-user': 'Login cancelado.',
-          'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'A chave da API do Firebase está inválida. Confira a configuração do projeto.'
-        };
-        showMessage(messages[error.code] || 'Não foi possível entrar com Google. Confira a configuração do Firebase e tente novamente.');
-        console.error('Falha no login Google:', error);
-      } finally {
-        button.disabled = false;
-        button.removeAttribute('aria-busy');
+        showMessage('Não foi possível validar a resposta do Google. Tente entrar novamente.');
+        console.error('Falha ao processar login Google:', error);
       }
     }
 
-    async function enterTeam() {
-      if (!currentUser || !db) return;
-      const code = document.getElementById('team-code').value.trim().toUpperCase();
-      if (!code) return alert('Digite o código da equipe.');
-      if (storesRef) storesRef.off();
-      showTeamMessage('');
-      currentTeam = code;
-      const name = currentUser.displayName || (currentUser.email && currentUser.email.split('@')[0]) || 'Usuário';
-      document.getElementById('current-team').textContent = code;
-      document.getElementById('main-user-name').textContent = name;
-      document.getElementById('main-user-photo').src = currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=3b82f6&color=fff`;
-      document.getElementById('team-screen').classList.add('hidden');
-      document.getElementById('main-app').classList.remove('hidden');
-      showAppMessage('');
+    window.addEventListener('load', initializeGoogleSignIn, { once: true });
 
-      storesRef = db.ref('teams/' + currentTeam + '/stores');
+    function getTeamStorageKey(teamCode) {
+      return TEAM_STORAGE_PREFIX + encodeURIComponent(currentUser.uid) + ':' + encodeURIComponent(teamCode);
+    }
+
+    function enterTeam() {
+      if (!currentUser) return;
+      const code = document.getElementById('team-code').value.trim().toUpperCase();
+      if (!code) return showTeamMessage('Digite o código da equipe.');
+      showTeamMessage('');
       try {
-        const snapshot = await storesRef.once('value');
-        const data = snapshot.val();
-        if (!data) {
+        const savedStores = localStorage.getItem(getTeamStorageKey(code));
+        if (savedStores === null) {
           const defaultStores = [
             { name: "Mercado Livre" },
             { name: "Shopee" },
@@ -268,37 +239,50 @@
             { name: "Temu" },
             { name: "Amazon" }
           ];
-          const obj = {};
-          defaultStores.forEach((s, i) => {
-            const id = (Date.now() + i).toString();
-            obj[id] = { name: s.name, count: 0, orders: [] };
-          });
-          await storesRef.set(obj);
+          stores = defaultStores.map((store, index) => ({
+            id: (Date.now() + index).toString(),
+            name: store.name,
+            count: 0,
+            orders: []
+          }));
+        } else {
+          const parsedStores = JSON.parse(savedStores);
+          if (!Array.isArray(parsedStores) || !parsedStores.every(store =>
+            store &&
+            typeof store.id === 'string' &&
+            typeof store.name === 'string' &&
+            Array.isArray(store.orders)
+          )) {
+            throw new Error('Formato dos dados locais inválido');
+          }
+          stores = parsedStores;
         }
-        storesRef.on('value', (teamSnapshot) => {
-          const teamData = teamSnapshot.val();
-          stores = teamData ? Object.keys(teamData).map(key => ({ id: key, ...teamData[key] })) : [];
-          renderStores();
-        }, error => {
-          showAppMessage('Não foi possível carregar as lojas da equipe.');
-          console.error('Falha ao carregar lojas:', error);
-        });
+
+        currentTeam = code;
+        const name = currentUser.displayName || currentUser.email.split('@')[0];
+        document.getElementById('current-team').textContent = code;
+        document.getElementById('main-user-name').textContent = name;
+        document.getElementById('main-user-photo').src = currentUser.photoURL;
+        document.getElementById('team-screen').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+        showAppMessage('');
+        renderStores();
+        if (savedStores === null) saveStores();
       } catch (error) {
-        document.getElementById('main-app').classList.add('hidden');
-        document.getElementById('team-screen').classList.remove('hidden');
-        showTeamMessage('Não foi possível acessar essa equipe. Confira o código e as permissões do Firebase.');
-        console.error('Falha ao entrar na equipe:', error);
+        showTeamMessage('Não foi possível carregar os dados deste navegador. Confira o armazenamento local e tente novamente.');
+        console.error('Falha ao carregar a equipe local:', error);
       }
     }
 
     function logout() {
-      if (storesRef) storesRef.off();
-      if (auth) auth.signOut().catch(error => {
-        showAppMessage('Não foi possível sair da conta. Tente novamente.');
-        console.error('Falha ao sair da conta:', error);
-      });
+      if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect();
       currentTeam = null;
+      currentUser = null;
       stores = [];
+      document.getElementById('team-code').value = '';
+      document.getElementById('main-app').classList.add('hidden');
+      document.getElementById('team-screen').classList.add('hidden');
+      document.getElementById('login-screen').classList.remove('hidden');
     }
 
     document.getElementById('stores-list').addEventListener('click', event => {
@@ -319,16 +303,13 @@
 
     function saveStores() {
       if (!currentTeam) return;
-      const obj = {};
-      stores.forEach(s => { 
-        const copy = { ...s }; 
-        delete copy.id; 
-        obj[s.id] = copy; 
-      });
-      db.ref('teams/' + currentTeam + '/stores').set(obj).catch(error => {
-        showAppMessage('Não foi possível salvar as alterações. Verifique sua conexão e as permissões.');
-        console.error('Falha ao salvar lojas:', error);
-      });
+      try {
+        localStorage.setItem(getTeamStorageKey(currentTeam), JSON.stringify(stores));
+        showAppMessage('');
+      } catch (error) {
+        showAppMessage('Não foi possível salvar neste navegador. O armazenamento pode estar cheio ou bloqueado.');
+        console.error('Falha ao salvar dados locais:', error);
+      }
     }
 
     function addStore() {
